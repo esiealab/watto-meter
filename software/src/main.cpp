@@ -8,8 +8,9 @@
 #include "DisplayManager.h"
 #include "INAManager.h"
 #include "SDManager.h"
-#include "WiFiManager.h"
-
+#include "WiFiController.h"
+#include "WiFiConfig.h" // Inclure les informations Wi-Fi externes
+  
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define SCREEN_I2C_ADDR 0x3C
@@ -27,10 +28,8 @@
 
 #define I2C_SDA_PIN 3               // SDA pin
 #define I2C_SCL_PIN 10              // SCL pin
-#define I2C_CLOCK_SPEED 400000  // I2C clock speed in Hz
+#define I2C_CLOCK_SPEED 400000      // I2C clock speed in Hz
 
-#define WIFI_SSID "YourWiFiSSID"
-#define WIFI_PASSWORD "YourWiFiPassword"
 #define TIMEZONE 1
 #define DAYLIGHT_SAVING 1
 
@@ -39,7 +38,7 @@
 INAManager inaManager;
 DisplayManager displayManager(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 SDManager sdManager;
-WiFiManager wifiManager(WIFI_SSID, WIFI_PASSWORD, TIMEZONE, DAYLIGHT_SAVING);
+WiFiController wifiController(WIFI_SSID, WIFI_PASSWORD, TIMEZONE, DAYLIGHT_SAVING);
 
 void setup() {
   // Initialisation de la communication série et I2C
@@ -54,7 +53,7 @@ void setup() {
     Serial.println(F("Erreur écran OLED"));
     while (1);
   }
-  displayManager.showStartupMessage();
+  displayManager.showMessage(F("Seaching INA..."));
 
   // Initialisation de l'INA
   if (!inaManager.begin(INA_MAXIMUM_AMPS, INA_SHUNT_MICRO_OHM)) {
@@ -64,8 +63,8 @@ void setup() {
   inaManager.configure(INA_BUS_CONVERSION_TIME, INA_SHUNT_CONVERSION_TIME, INA_AVERAGING_COUNT, INA_MEASUREMENT_MODE);
 
   // Connect to WiFi and sync time
-  wifiManager.connect();
-  wifiManager.syncTime();
+  wifiController.connect();
+  wifiController.syncTime();
 
   // Initialize SD card
   if (!sdManager.begin()) {
@@ -78,6 +77,14 @@ void setup() {
 }
 
 void loop() {
+  // Récupérer les informations Wi-Fi
+  String wifiSSID = wifiController.getSSID();
+  String wifiIP = wifiController.getIPAddress();
+
+  // Afficher les informations Wi-Fi sur l'écran
+  displayManager.clear();
+  displayManager.showWiFiInfo(wifiSSID, wifiIP);
+
   uint8_t devicesFound = inaManager.getDevicesFound();
   for (uint8_t i = 0; i < devicesFound; i++) {
     float busVolts = inaManager.getBusVolts(i);
@@ -85,7 +92,7 @@ void loop() {
     float powerWatts = inaManager.getPowerWatts(i);
 
     // Get current time
-    String currentTime = wifiManager.getCurrentTime(true);
+    String currentTime = wifiController.getCurrentTime(true);
     // Prepare CSV line
     String csvLine = String(currentTime + "," + String(inaManager.getDeviceAddress(i), HEX) + "," + String(busVolts, 3) + "," + String(currentMilliAmps, 3) + "," + String(powerWatts, 3) + "\n");
     // Write to data.csv
@@ -95,12 +102,12 @@ void loop() {
     Serial.printf("INA Measures: Nr=%d Adr=0x%X Type=%s Bus=%.3fV Current=%.3fmA Power=%.3fW\n", 
       i + 1, inaManager.getDeviceAddress(i), inaManager.getDeviceName(i), busVolts, currentMilliAmps, powerWatts);
     // Display measurements on OLED
-    currentTime = wifiManager.getCurrentTime(false);
+    currentTime = wifiController.getCurrentTime(false);
     displayManager.showMeasurements(busVolts, currentMilliAmps, powerWatts, currentTime, inaManager.getDeviceAddress(i));
   }
 
   // Read and display the content of data.csv
-  Serial.println("Content of data.csv:");
-  sdManager.readFile(DATA_FILE);
+  //Serial.println("Content of data.csv:");
+  //sdManager.readFile(DATA_FILE);
   delay(DELAY);
 }

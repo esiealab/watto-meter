@@ -1,20 +1,23 @@
-#include "WiFiManager.h"
+#include "WiFiController.h"
 
-WiFiManager::WiFiManager(const char *ssid, const char *password, long timezone, byte daysavetime)
+WiFiController::WiFiController(const char *ssid, const char *password, long timezone, byte daysavetime)
     : ssid(ssid), password(password), timezone(timezone), daysavetime(daysavetime) {}
 
-void WiFiManager::connect() {
-    Serial.printf("Connecting to %s\n", ssid);
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println("\nWiFi connected");
+void configModeCallback (WiFiManager *myWiFiManager) {
+    Serial.println("Entered config mode");
+    Serial.println(WiFi.softAPIP());
+    Serial.println(myWiFiManager->getConfigPortalSSID());
+    //displayManager.showMessage(String(F("Enter Wifi Config Mode\nConnect to AP ")) + myWiFiManager->getConfigPortalSSID() + String(F(" to configure")));
+}
+
+void WiFiController::connect() {
+    wifiManager.setAPCallback(configModeCallback);
+    wifiManager.autoConnect(ssid, password);
+    Serial.printf("WiFi connected to %s\n", ssid);
     Serial.printf("IP address: %s\n", WiFi.localIP().toString().c_str());
 }
 
-void WiFiManager::syncTime() {
+void WiFiController::syncTime() {
     configTime(3600 * timezone, daysavetime * 3600, "pool.ntp.org", "time.nist.gov");
     struct tm timeinfo;
     if (!getLocalTime(&timeinfo)) {
@@ -26,7 +29,7 @@ void WiFiManager::syncTime() {
                   timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
 }
 
-String WiFiManager::getCurrentTime(bool millisec) {
+String WiFiController::getCurrentTime(bool millisec) {
     struct tm timeinfo;
     if (!getLocalTime(&timeinfo)) return "Failed to get time";
     char buffer[24];
@@ -41,4 +44,12 @@ String WiFiManager::getCurrentTime(bool millisec) {
             timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
     }
     return String(buffer);
+}
+
+String WiFiController::getSSID() {
+    return String(ssid);
+}
+
+String WiFiController::getIPAddress() {
+    return WiFi.localIP().toString();
 }

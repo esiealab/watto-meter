@@ -7,36 +7,35 @@ bool DisplayManager::begin(uint8_t vccState, uint8_t i2cAddr) {
     return display.begin(vccState, i2cAddr);
 }
 
-void DisplayManager::showStartupMessage() {
+void DisplayManager::showMessage(String message) {
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0, 0);
-    display.println(F("INA Scan..."));
+    display.println(message);
     display.display();
 }
 
 void DisplayManager::showMeasurements(float busVolts, float currentMilliAmps, float powerWatts, const String& currentTime, uint8_t deviceAddress) {
-    display.clearDisplay();
-    display.setCursor(0, 0);
+    display.setCursor(0, 2*10);
     display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
 
     // Display current time
     display.println(currentTime);
+    display.println();
 
     // Display INA address
     display.print(F("Addr: 0x"));
     display.println(deviceAddress, HEX);
 
     // Display voltage, current, and power
-    display.setTextSize(2);
-    display.print(F("V:"));
+    display.setTextSize(1);
     display.print(busVolts, 2);
-    display.println(F("V"));
-    display.print(F("I:"));
+    display.print(F("V"));
+    display.print(F(" - "));
     display.print(currentMilliAmps, 1);
     display.println(F("mA"));
-    display.print(F("P:"));
     display.print(powerWatts, 1);
     display.println(F("W"));
 
@@ -45,4 +44,14 @@ void DisplayManager::showMeasurements(float busVolts, float currentMilliAmps, fl
 
 void DisplayManager::clear() {
     display.clearDisplay();
+}
+
+void DisplayManager::showWiFiInfo(const String &ssid, const String &ip) {
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.print("WiFi: ");
+    display.println(ssid);
+    display.println(ip);
+    //display.display();
 }
