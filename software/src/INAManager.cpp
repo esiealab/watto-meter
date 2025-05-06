@@ -1,39 +1,38 @@
 #include "INAManager.h"
 
-INAManager::INAManager() : devicesFound(0) {}
+INAManager::INAManager() : deviceFound(false) {}
 
-uint8_t INAManager::begin(float maxAmps, uint32_t shuntMicroOhm) {
-    devicesFound = ina.begin(maxAmps, shuntMicroOhm);
-    return devicesFound;
+bool INAManager::begin(float maxAmps, uint32_t shuntMicroOhm) {
+    uint8_t devices = ina.begin(maxAmps, shuntMicroOhm);
+    deviceFound = (devices > 0);  // Vérifie si au moins un périphérique a été détecté
+    return deviceFound;
 }
 
 void INAManager::configure(uint16_t busConversionTime, uint16_t shuntConversionTime, uint16_t averaging, uint8_t mode) {
-    ina.setBusConversion(busConversionTime);   // Conversion time for bus voltage
-    ina.setShuntConversion(shuntConversionTime); // Conversion time for shunt voltage
-    ina.setAveraging(averaging);               // Averaging count
-    ina.setMode(mode);                         // Measurement mode
+    if (deviceFound) {
+        ina.setBusConversion(busConversionTime);      // Conversion time for bus voltage
+        ina.setShuntConversion(shuntConversionTime);  // Conversion time for shunt voltage
+        ina.setAveraging(averaging);                  // Averaging count
+        ina.setMode(mode);                            // Measurement mode
+    }
 }
 
-uint8_t INAManager::getDevicesFound() const {
-    return devicesFound;
+float INAManager::getBusVolts() {
+    return deviceFound ? ina.getBusMilliVolts() / 1000.0 : 0.0;
 }
 
-float INAManager::getBusVolts(uint8_t deviceIndex) {
-    return ina.getBusMilliVolts(deviceIndex) / 1000.0;
+float INAManager::getCurrentMilliAmps() {
+    return deviceFound ? ina.getBusMicroAmps() / 1000.0 : 0.0;
 }
 
-float INAManager::getCurrentMilliAmps(uint8_t deviceIndex) {
-    return ina.getBusMicroAmps(deviceIndex) / 1000.0;
+float INAManager::getPowerWatts() {
+    return deviceFound ? ina.getBusMicroWatts() / 1000000.0 : 0.0;
 }
 
-float INAManager::getPowerWatts(uint8_t deviceIndex) {
-    return ina.getBusMicroWatts(deviceIndex) / 1000000.0;
+uint8_t INAManager::getDeviceAddress() {
+    return deviceFound ? ina.getDeviceAddress() : 0;
 }
 
-uint8_t INAManager::getDeviceAddress(uint8_t deviceIndex) {
-    return ina.getDeviceAddress(deviceIndex);
-}
-
-const char* INAManager::getDeviceName(uint8_t deviceIndex) {
-    return ina.getDeviceName(deviceIndex);
+const char *INAManager::getDeviceName() {
+    return deviceFound ? ina.getDeviceName() : "No Device";
 }

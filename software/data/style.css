@@ -1,0 +1,26 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+}
+
+.status-button.start {
+    background-color: green;
+}
+
+.status-button.stop {
+    background-color: red;
+}
+
+@media (max-width: 768px) {
+    .status-button {
+        width: 100%; 
+    }
+
+    .wifi-info {
+        text-align: left; 
+    }
+
+    #fileList {
+        font-size: 14px;
+    }
+}

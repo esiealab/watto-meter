@@ -6,7 +6,7 @@
 #include "SPI.h"
 
 class SDManager {
-public:
+   public:
     SDManager();
     bool begin(int csPin = -1, int sck = -1, int miso = -1, int mosi = -1);
     void listDir(const char *dirname, uint8_t levels);
@@ -18,8 +18,8 @@ public:
     void renameFile(const char *path1, const char *path2);
     void deleteFile(const char *path);
 
-private:
+   private:
     fs::SDFS &fs;
 };
 
-#endif // SD_MANAGER_H
+#endif  // SD_MANAGER_H

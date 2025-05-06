@@ -2,19 +2,20 @@
 #define WIFI_CONTROLLER_H
 
 #include <WiFi.h>
-#include <time.h>
 #include <WiFiManager.h>
+#include <time.h>
 
 class WiFiController {
-public:
+   public:
     WiFiController(const char *ssid, const char *password, long timezone, byte daysavetime);
-    void connect();
+    void connect(void (*configModeCallback)(WiFiManager *) = NULL);
     void syncTime();
-    String getCurrentTime(bool millisec = false);
+    struct tm getCurrentTime();
+    String formatCurrentTime(struct tm timeinfo, bool millisec = false, bool shortFormat = false);
     String getSSID();
     String getIPAddress();
 
-private:
+   private:
     const char *ssid;
     const char *password;
     long timezone;
@@ -22,4 +23,4 @@ private:
     WiFiManager wifiManager;
 };
 
-#endif // WIFI_CONTROLLER_H
+#endif  // WIFI_CONTROLLER_H

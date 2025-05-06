@@ -14,3 +14,6 @@ $ pio run --target upload
 # Clean build files
 $ pio run --target clean
 ```
+
+
+See https://randomnerdtutorials.com/esp32-vs-code-platformio-spiffs/ to send data folder to the ESP32.

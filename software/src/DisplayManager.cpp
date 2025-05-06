@@ -1,6 +1,6 @@
 #include "DisplayManager.h"
 
-DisplayManager::DisplayManager(uint8_t width, uint8_t height, TwoWire* wire, int8_t resetPin)
+DisplayManager::DisplayManager(uint8_t width, uint8_t height, TwoWire *wire, int8_t resetPin)
     : display(width, height, wire, resetPin) {}
 
 bool DisplayManager::begin(uint8_t vccState, uint8_t i2cAddr) {
@@ -16,8 +16,8 @@ void DisplayManager::showMessage(String message) {
     display.display();
 }
 
-void DisplayManager::showMeasurements(float busVolts, float currentMilliAmps, float powerWatts, const String& currentTime, uint8_t deviceAddress) {
-    display.setCursor(0, 2*10);
+void DisplayManager::showMeasurements(float busVolts, float currentMilliAmps, float powerWatts, const String &currentTime, uint8_t deviceAddress) {
+    display.setCursor(0, 2 * 10);
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
 
@@ -48,10 +48,11 @@ void DisplayManager::clear() {
 
 void DisplayManager::showWiFiInfo(const String &ssid, const String &ip) {
     display.setTextSize(1);
+    display.drawBitmap(0, 0, wifiicon, 8, 8, WHITE);
     display.setTextColor(SSD1306_WHITE);
-    display.setCursor(0, 0);
-    display.print("WiFi: ");
-    display.println(ssid);
+    display.setCursor(10, 0);
+    display.print(ssid);
+    display.print(F(" "));
     display.println(ip);
-    //display.display();
+    // display.display();
 }
