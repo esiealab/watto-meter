@@ -31,7 +31,7 @@ Watto-Meter is an open-source project designed to measure the power consumption 
 
 ## Open-Source Hardware
 
-The hardware for Watto-Meter is also open-source, created by @Hyrla. All the files required to manufacture the PCB and assemble the device are available in the [`hardware/`](hardware/) folder.
+The hardware for Watto-Meter is also open-source, created by [@Hyrla](https://github.com/Hyrla). All the files required to manufacture the PCB and assemble the device are available in the [`hardware/`](hardware/) folder.
 
 ### Hardware Image
 

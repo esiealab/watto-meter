@@ -1,6 +1,6 @@
 ## Open-Source Hardware
 
-The hardware for Watto-Meter is also open-source, created by @Hyrla. All the files required to manufacture the PCB and assemble the device are available in the `hardware/` folder.
+The hardware for Watto-Meter is also open-source, created by [@Hyrla](https://github.com/Hyrla). All the files required to manufacture the PCB and assemble the device are available in the `hardware/` folder.
 
 ### Hardware Image
 
@@ -13,7 +13,7 @@ Below is an image of the Watto-Meter hardware:
 To manufacture the PCB, you can use JLCPCB's fabrication service. Follow these steps:
 
 1. **Download the Gerber files**:
-   - The Gerber files required for fabrication are located in the `hardware/` folder.
+   - The Gerber files required for fabrication are located in the [`hardware/`](/) folder.
 
 2. **Create an account on JLCPCB**:
    - Visit [https://jlcpcb.com](https://jlcpcb.com) and create an account.
@@ -25,7 +25,7 @@ To manufacture the PCB, you can use JLCPCB's fabrication service. Follow these s
    - Select your desired options (PCB color, thickness, etc.).
 
 5. **Order components**:
-   - If you want the PCB assembled, upload the Bill of Materials (BOM) and Component Placement List (CPL) files available in the `hardware/production/` folder.
+   - If you want the PCB assembled, upload the Bill of Materials (BOM) and Component Placement List (CPL) files available in the [`hardware/production/`](production/) folder.
 
 6. **Place the order**:
    - Confirm your order and wait for delivery.
