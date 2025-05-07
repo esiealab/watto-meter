@@ -6,7 +6,7 @@ The hardware for Watto-Meter is also open-source, created by @Hyrla. All the fil
 
 Below is an image of the Watto-Meter hardware:
 
-<div style="text-align:center"><img width="500" src="images/watto-meter-pcb.png" /></div>
+<p align="center"><img width="500" src="images/watto-meter-pcb.png" /></p>
 
 ### Ordering the PCB on JLCPCB
 

@@ -37,14 +37,15 @@ The hardware for Watto-Meter is also open-source, created by @Hyrla. All the fil
 
 Below is an image of the Watto-Meter hardware:
 
-<div style="text-align:center"><img width="500" src="hardware/images/watto-meter-pcb.png" /></div>
+<p align="center">
+<img width="500" src="hardware/images/watto-meter-pcb.png" /></p>
 
 
 ---
 
 ## Software Development and Deployment
 
-<div style="text-align:center"><img width="500" src="software/images/web-interface.png" /></div>
+<p align="center"><img width="500" src="software/images/web-interface.png" /></p>
 
 ### Prerequisites
 
@@ -79,7 +80,7 @@ According to [this guide](https://randomnerdtutorials.com/esp32-vs-code-platform
    ```
 Or you can open the PlatformIO menu and click on the following buttons:
 
-<div style="text-align:center"><img src="software/images/upload-filesystem.png" /></div>
+<p align="center"><img src="software/images/upload-filesystem.png" /></p>
 
 ---
 
