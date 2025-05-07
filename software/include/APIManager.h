@@ -28,6 +28,7 @@ class APIManager {
     void handleListFiles(AsyncWebServerRequest *request);
     void handleDownloadFile(AsyncWebServerRequest *request);
     void handleDeleteFile(AsyncWebServerRequest *request);
+    void handleListCsvFiles(AsyncWebServerRequest *request);
 };
 
 #endif  // API_MANAGER_H
