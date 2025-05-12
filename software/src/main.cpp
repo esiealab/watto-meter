@@ -40,7 +40,7 @@ void updateDisplayTask(void *parameter);
 INAManager inaManager;
 DisplayManager displayManager(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 SDManager sdManager;
-WiFiController wifiController(WIFI_SSID, WIFI_PASSWORD, TIMEZONE, DAYLIGHT_SAVING);
+WiFiController wifiController(TIMEZONE, DAYLIGHT_SAVING);
 APIManager apiManager(80);
 String fileName = "";
 String deviceName = "";
@@ -74,9 +74,9 @@ void setup() {
     inaManager.configure(INA_BUS_CONVERSION_TIME, INA_SHUNT_CONVERSION_TIME, INA_AVERAGING_COUNT, INA_MEASUREMENT_MODE);
     displayManager.showMessage(F("INA found."));
 
-    // Connect to WiFi and sync time
+    // Initialize WiFi and sync time
     displayManager.showMessage(F("Connect to WiFi..."));
-    wifiController.connect(configModeCallback);
+    wifiController.connect(WIFI_SSID, WIFI_PASSWORD, configModeCallback);
     displayManager.showMessage(F("Sync time..."));
     wifiController.syncTime();
 

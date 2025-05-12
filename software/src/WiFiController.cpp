@@ -1,9 +1,9 @@
 #include "WiFiController.h"
 
-WiFiController::WiFiController(const char *ssid, const char *password, long timezone, byte daysavetime)
-    : ssid(ssid), password(password), timezone(timezone), daysavetime(daysavetime) {}
+WiFiController::WiFiController(long timezone, byte daysavetime)
+    : timezone(timezone), daysavetime(daysavetime) {}
 
-void WiFiController::connect(void (*configModeCallback)(WiFiManager *)) {
+void WiFiController::connect(const char *ssid, const char *password, void (*configModeCallback)(WiFiManager *)) {
     if (configModeCallback != NULL) {
         wifiManager.setAPCallback(configModeCallback);
     } else {
@@ -57,7 +57,7 @@ String WiFiController::formatCurrentTime(struct tm timeinfo, bool millisec, bool
 }
 
 String WiFiController::getSSID() {
-    return String(ssid);
+    return WiFi.SSID();
 }
 
 String WiFiController::getIPAddress() {
