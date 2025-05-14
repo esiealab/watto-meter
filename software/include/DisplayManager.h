@@ -9,9 +9,7 @@ class DisplayManager {
    public:
     DisplayManager(uint8_t width, uint8_t height, TwoWire *wire, int8_t resetPin);
     bool begin(uint8_t vccState, uint8_t i2cAddr);
-    void showMessage(String message);
-    void showMeasurements(float busVolts, float currentMilliAmps, float powerWatts, const String &currentTime, uint8_t deviceAddress);
-    void showWiFiInfo(const String &ssid, const String &ip);
+    void showMessage(String message, bool clearScreen = true, uint8_t startLine = 0, bool forceDisplay = true, const unsigned char *icon = NULL);
     void clear();
 
    private:

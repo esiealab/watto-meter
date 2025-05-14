@@ -3,7 +3,6 @@
 #include "DisplayManager.h"
 #include "INAManager.h"
 #include "SDManager.h"
-#include "WiFiConfig.h"
 #include "WiFiController.h"
 // clang-format off
 #include "APIManager.h"
@@ -37,6 +36,9 @@ void measureTask(void *parameter);
 const int DISPLAY_TASK_PERIOD = 500;
 void updateDisplayTask(void *parameter);
 
+
+void setupWiFiServer(void *parameter);
+
 INAManager inaManager;
 DisplayManager displayManager(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 SDManager sdManager;
@@ -50,7 +52,6 @@ void configModeCallback(WiFiManager *myWiFiManager) {
     Serial.println("WiFi Config mode");
     Serial.println(WiFi.softAPIP());
     Serial.println(myWiFiManager->getConfigPortalSSID());
-    displayManager.showMessage(String(F("Wifi Config Mode\n\nPlease, connect to \n\"")) + myWiFiManager->getConfigPortalSSID() + String(F("\"")));
 }
 
 void setup() {
@@ -74,20 +75,22 @@ void setup() {
     inaManager.configure(INA_BUS_CONVERSION_TIME, INA_SHUNT_CONVERSION_TIME, INA_AVERAGING_COUNT, INA_MEASUREMENT_MODE);
     displayManager.showMessage(F("INA found."));
 
-    // Initialize WiFi and sync time
-    displayManager.showMessage(F("Connect to WiFi..."));
-    wifiController.connect(WIFI_SSID, WIFI_PASSWORD, configModeCallback);
-    displayManager.showMessage(F("Sync time..."));
-    wifiController.syncTime();
-
     // Initialize the SD card
     if (!sdManager.begin()) {
         Serial.println("Failed to initialize SD card");
         while (1);
     }
 
-    // Start the web server
-    apiManager.begin();
+    // Create a task for initialization
+    xTaskCreatePinnedToCore(
+        setupWiFiServer, // Task function
+        "Init Task",  // Task name
+        4096,         // Stack size
+        NULL,         // Task parameter
+        1,            // Task priority
+        NULL,         // Task handle (not used here)
+        1             // Run on core 1
+    );
 
     // Start the measure task
     xTaskCreatePinnedToCore(
@@ -115,6 +118,19 @@ void setup() {
 void loop() {
 }
 
+void setupWiFiServer(void *parameter) {
+    // Initialize WiFi and sync time
+    displayManager.showMessage(F("Connect to WiFi..."));
+    wifiController.connect(configModeCallback);
+    displayManager.showMessage(F("Sync time..."));
+    wifiController.syncTime();
+    // Start the web server
+    apiManager.begin();
+
+    // Delete the task after initialization is complete
+    vTaskDelete(NULL);
+}
+
 void measureTask(void *parameter) {
     TickType_t xlastWakeTime = 0;
     float busVolts, currentMilliAmps, powerWatts;
@@ -127,22 +143,19 @@ void measureTask(void *parameter) {
                 fileName = "/" + deviceName + "_" + wifiController.formatCurrentTime(timeinfo, false, true) + ".csv";
 
                 // Prepare the CSV file
-                sdManager.writeFile(fileName.c_str(), "Timestamp,Address,BusVolts,CurrentMilliAmps,PowerWatts\n");
+                sdManager.writeFile(fileName.c_str(), "Timestamp,BusVolts,CurrentMilliAmps\n");
                 Serial.println("Measuring for device: " + deviceName);
             }
 
             // Retrieve measurements
             busVolts = inaManager.getBusVolts();
             currentMilliAmps = inaManager.getCurrentMilliAmps();
-            powerWatts = inaManager.getPowerWatts();
             timeinfo = wifiController.getCurrentTime();
 
             // Prepare a CSV line
             String csvLine = String(wifiController.formatCurrentTime(timeinfo, true, false) + "," +
-                                    String(inaManager.getDeviceAddress(), HEX) + "," +
                                     String(busVolts, 3) + "," +
-                                    String(currentMilliAmps, 3) + "," +
-                                    String(powerWatts, 3) + "\n");
+                                    String(currentMilliAmps, 3) + "\n");
 
             // Write to the CSV file
             sdManager.appendFile(fileName.c_str(), csvLine.c_str());
@@ -157,30 +170,19 @@ void measureTask(void *parameter) {
 
 void updateDisplayTask(void *parameter) {
     TickType_t xLastWakeTime = xTaskGetTickCount();
-    String wifiSSID = "";
-    String wifiIP = "";
     float busVolts, currentMilliAmps, powerWatts;
     struct tm timeinfo;
 
     while (true) {
-        // Retrieve WiFi information
-        wifiSSID = wifiController.getSSID();
-        wifiIP = wifiController.getIPAddress();
-
-        // Display WiFi information on the screen
-        displayManager.clear();
-        displayManager.showWiFiInfo(wifiSSID, wifiIP);
+        displayManager.showMessage(wifiController.getInfosMessage(), true, 0, false, wifiicon);
 
         // Retrieve measurements for display
         busVolts = inaManager.getBusVolts();
         currentMilliAmps = inaManager.getCurrentMilliAmps();
-        powerWatts = inaManager.getPowerWatts();
         timeinfo = wifiController.getCurrentTime();
 
-        // Display measurements on the OLED screen
-        displayManager.showMeasurements(busVolts, currentMilliAmps, powerWatts,
-                                        wifiController.formatCurrentTime(timeinfo, false, false),
-                                        inaManager.getDeviceAddress());
+        displayManager.showMessage(String(wifiController.formatCurrentTime(timeinfo, false, false) + "\n\nVolt: " + String(busVolts, 2) + "V\n" +
+                                        "Current: " + String(currentMilliAmps, 2) + "mA\n"), false, 3, true, NULL);
 
         // Delay before the next execution
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(DISPLAY_TASK_PERIOD));

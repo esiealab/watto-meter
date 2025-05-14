@@ -1,21 +1,31 @@
 #include "WiFiController.h"
 
 WiFiController::WiFiController(long timezone, byte daysavetime)
-    : timezone(timezone), daysavetime(daysavetime) {}
+    : timezone(timezone), daysavetime(daysavetime) {
+        uniqueHostname = "WM-" + String((uint32_t)ESP.getEfuseMac(), HEX);
+        uniqueHostname.toUpperCase();
+        wifiManager.setHostname(uniqueHostname.c_str());
 
-void WiFiController::connect(const char *ssid, const char *password, void (*configModeCallback)(WiFiManager *)) {
+        wifiManager.setConfigPortalBlocking(true);
+        //wifiManager.setConfigPortalTimeout(30);  // Set timeout to 30 seconds
+    }
+
+void WiFiController::connect(void (*configModeCallback)(WiFiManager *)) {
     if (configModeCallback != NULL) {
         wifiManager.setAPCallback(configModeCallback);
     } else {
-        wifiManager.setAPCallback([](WiFiManager *myWiFiManager) {
-            Serial.println("Entered config mode");
+        wifiManager.setAPCallback([this](WiFiManager *myWiFiManager) {
+            Serial.println("WiFi Config mode");
             Serial.println(WiFi.softAPIP());
             Serial.println(myWiFiManager->getConfigPortalSSID());
+            Serial.println("Please connect to the WiFi network and open the config portal.");
         });
     }
-    wifiManager.autoConnect(ssid, password);
-    Serial.printf("WiFi connected to %s\n", ssid);
-    Serial.printf("IP address: %s\n", WiFi.localIP().toString().c_str());
+    
+    wifiManager.autoConnect(uniqueHostname.c_str(), NULL);
+    Serial.printf("WiFi connected to %s\n", getSSID());
+    Serial.printf("IP address: %s\n", getIPAddress());
+    Serial.printf("Hostname: %s\n", getHostname());
 }
 
 void WiFiController::syncTime() {
@@ -62,4 +72,30 @@ String WiFiController::getSSID() {
 
 String WiFiController::getIPAddress() {
     return WiFi.localIP().toString();
+}
+
+String WiFiController::getHostname() {
+    return WiFi.getHostname();
+}
+
+bool WiFiController::isConnected() {
+    return WiFi.status() == WL_CONNECTED;
+}
+
+bool WiFiController::isConfigMode() {
+    return wifiManager.getConfigPortalActive();
+}
+
+String WiFiController::getInfosMessage() {
+    String info;
+    if (!isConfigMode()) {
+        info = getSSID() + "\n";
+        info += getIPAddress() + "\n";
+        info += getHostname() + "\n";
+    } else {
+        info = WiFi.softAPSSID() + " (AP)\n";
+        info += WiFi.softAPIP().toString() + "\n";
+        info += "Please configure.\n";
+    }
+    return info;
 }
