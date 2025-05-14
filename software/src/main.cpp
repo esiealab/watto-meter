@@ -2,7 +2,7 @@
 
 #include "DisplayManager.h"
 #include "INAManager.h"
-#include "SDManager.h"
+#include "SD.h"
 #include "WiFiController.h"
 // clang-format off
 #include "APIManager.h"
@@ -28,25 +28,35 @@
 #define TIMEZONE 1
 #define DAYLIGHT_SAVING 1
 
+#define QUEUE_SIZE 1000
+
 // Frequency of the measure task
-const int MEASURE_TASK_PERIOD = 20;
-void measureTask(void *parameter);
+const int MEASURE_TASK_PERIOD = 2;
+const uint8_t NB_MEASURE_BEFORE_SD = 50;  // Number of measures before writing to SD
+void readI2CTask(void *parameter);
+void writeSDTask(void *parameter);
 
 // Frequency of the display update task (in milliseconds)
-const int DISPLAY_TASK_PERIOD = 500;
+const int DISPLAY_TASK_PERIOD = 1000;
 void updateDisplayTask(void *parameter);
-
 
 void setupWiFiServer(void *parameter);
 
+struct MeasurementData {
+    float busVolts;
+    float currentMilliAmps;
+    struct tm timeinfo;
+} measurement;
+
 INAManager inaManager;
 DisplayManager displayManager(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
-SDManager sdManager;
 WiFiController wifiController(TIMEZONE, DAYLIGHT_SAVING);
 APIManager apiManager(80);
 String fileName = "";
 String deviceName = "";
 String csvLine = "";
+
+QueueHandle_t measurementQueue;
 
 void configModeCallback(WiFiManager *myWiFiManager) {
     Serial.println("WiFi Config mode");
@@ -58,7 +68,12 @@ void setup() {
     // Initialize serial communication and I2C
     Serial.begin(SERIAL_SPEED);
     Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, I2C_CLOCK_SPEED);
-    Serial.println("Watto");
+
+    // Initialize the SD card
+    if (!SD.begin()) {
+        Serial.println(F("SD card error"));
+        while (1);
+    }
 
     // Initialize the OLED display
     if (!displayManager.begin(SSD1306_SWITCHCAPVCC, SCREEN_I2C_ADDR)) {
@@ -75,32 +90,44 @@ void setup() {
     inaManager.configure(INA_BUS_CONVERSION_TIME, INA_SHUNT_CONVERSION_TIME, INA_AVERAGING_COUNT, INA_MEASUREMENT_MODE);
     displayManager.showMessage(F("INA found."));
 
-    // Initialize the SD card
-    if (!sdManager.begin()) {
-        Serial.println("Failed to initialize SD card");
+    // Create the queue for measurements
+    measurementQueue = xQueueCreate(QUEUE_SIZE, sizeof(struct MeasurementData));
+    if (measurementQueue == NULL) {
+        Serial.println("Failed to create measurement queue");
         while (1);
     }
 
-    // Create a task for initialization
+    // Start the I2C reading task
     xTaskCreatePinnedToCore(
-        setupWiFiServer, // Task function
-        "Init Task",  // Task name
-        4096,         // Stack size
-        NULL,         // Task parameter
-        1,            // Task priority
-        NULL,         // Task handle (not used here)
-        1             // Run on core 1
+        readI2CTask,      // Task function
+        "Read I2C Task",  // Task name
+        4096,             // Stack size
+        NULL,             // Task parameter
+        4,                // Task priority (higher priority)
+        NULL,             // Task handle (not used here)
+        1                 // Run on core 1
     );
 
-    // Start the measure task
+    // Start the SD card writing task
     xTaskCreatePinnedToCore(
-        measureTask,     // Task function
-        "Measure Task",  // Task name
-        4096,            // Stack size
-        NULL,            // Task parameter
-        3,               // Task priority
-        NULL,            // Task handle (not used here)
-        1                // Run on core 1
+        writeSDTask,      // Task function
+        "Write SD Task",  // Task name
+        4096,             // Stack size
+        NULL,             // Task parameter
+        3,                // Task priority (lower priority)
+        NULL,             // Task handle (not used here)
+        1                 // Run on core 1
+    );
+
+    // Create a task for initialization
+    xTaskCreatePinnedToCore(
+        setupWiFiServer,  // Task function
+        "Init Task",      // Task name
+        4096,             // Stack size
+        NULL,             // Task parameter
+        1,                // Task priority
+        NULL,             // Task handle (not used here)
+        1                 // Run on core 1
     );
 
     // Start the display update task
@@ -109,7 +136,7 @@ void setup() {
         "Update Display Task",  // Task name
         4096,                   // Stack size
         NULL,                   // Task parameter
-        2,                      // Task priority
+        3,                      // Task priority
         NULL,                   // Task handle (not used here)
         1                       // Run on core 1
     );
@@ -131,43 +158,6 @@ void setupWiFiServer(void *parameter) {
     vTaskDelete(NULL);
 }
 
-void measureTask(void *parameter) {
-    TickType_t xlastWakeTime = 0;
-    float busVolts, currentMilliAmps, powerWatts;
-    struct tm timeinfo;
-    while (true) {
-        if (apiManager.isMeasuring()) {
-            if (fileName == "") {
-                struct tm timeinfo = wifiController.getCurrentTime();
-                deviceName = apiManager.getDeviceName();
-                fileName = "/" + deviceName + "_" + wifiController.formatCurrentTime(timeinfo, false, true) + ".csv";
-
-                // Prepare the CSV file
-                sdManager.writeFile(fileName.c_str(), "Timestamp,BusVolts,CurrentMilliAmps\n");
-                Serial.println("Measuring for device: " + deviceName);
-            }
-
-            // Retrieve measurements
-            busVolts = inaManager.getBusVolts();
-            currentMilliAmps = inaManager.getCurrentMilliAmps();
-            timeinfo = wifiController.getCurrentTime();
-
-            // Prepare a CSV line
-            String csvLine = String(wifiController.formatCurrentTime(timeinfo, true, false) + "," +
-                                    String(busVolts, 3) + "," +
-                                    String(currentMilliAmps, 3) + "\n");
-
-            // Write to the CSV file
-            sdManager.appendFile(fileName.c_str(), csvLine.c_str());
-        } else {
-            fileName = "";  // Reset the file name if measurements are stopped
-        }
-
-        // Delay before the next execution
-        vTaskDelayUntil(&xlastWakeTime, pdMS_TO_TICKS(MEASURE_TASK_PERIOD));
-    }
-}
-
 void updateDisplayTask(void *parameter) {
     TickType_t xLastWakeTime = xTaskGetTickCount();
     float busVolts, currentMilliAmps, powerWatts;
@@ -177,14 +167,76 @@ void updateDisplayTask(void *parameter) {
         displayManager.showMessage(wifiController.getInfosMessage(), true, 0, false, wifiicon);
 
         // Retrieve measurements for display
+        timeinfo = wifiController.getCurrentTime();
         busVolts = inaManager.getBusVolts();
         currentMilliAmps = inaManager.getCurrentMilliAmps();
-        timeinfo = wifiController.getCurrentTime();
 
-        displayManager.showMessage(String(wifiController.formatCurrentTime(timeinfo, false, false) + "\n\nVolt: " + String(busVolts, 2) + "V\n" +
-                                        "Current: " + String(currentMilliAmps, 2) + "mA\n"), false, 3, true, NULL);
+        UBaseType_t queueFillPercentage = (uxQueueMessagesWaiting(measurementQueue) * 100) / (uxQueueSpacesAvailable(measurementQueue) + uxQueueMessagesWaiting(measurementQueue));
+        displayManager.showMessage(String(wifiController.formatCurrentTime(timeinfo, false, false) + "\nQueue: " + String(queueFillPercentage) + "%\n" +
+                                          "Volt: " + String(busVolts, 2) + "V\n" +
+                                          "Current: " + String(currentMilliAmps, 2) + "mA\n"),
+                                   false, 3, true, NULL);
 
         // Delay before the next execution
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(DISPLAY_TASK_PERIOD));
+    }
+}
+
+void readI2CTask(void *parameter) {
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+
+    while (true) {
+        if (apiManager.isMeasuring()) {
+            // Read data from INA
+            measurement.timeinfo = wifiController.getCurrentTime();
+            measurement.busVolts = inaManager.getBusVolts();
+            measurement.currentMilliAmps = inaManager.getCurrentMilliAmps();
+
+            // Send data to the queue
+            if (xQueueSend(measurementQueue, &measurement, 0) != pdPASS) {
+                Serial.println("Measurement queue full, data dropped");
+                vTaskDelay(pdMS_TO_TICKS(100));  // Wait before retrying
+            }
+        }
+
+        // Delay before the next reading
+        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(MEASURE_TASK_PERIOD));
+    }
+}
+
+void writeSDTask(void *parameter) {
+    File file;
+    String csvLine;
+    uint8_t nbLines = 0;
+
+    while (true) {
+        if (!apiManager.isMeasuring()) {
+            fileName = "";  // Reset the file name if measurements are stopped
+        } else if (fileName == "") {
+            // Create a new file if necessary
+            fileName = "/" + apiManager.getDeviceName() + "_" +
+                       wifiController.formatCurrentTime(measurement.timeinfo, false, true) + ".csv";
+            file = SD.open(fileName.c_str(), FILE_WRITE);
+            file.println("Timestamp,BusVolts,CurrentMilliAmps");
+            file.close();
+
+            Serial.println("Measuring for device: " + apiManager.getDeviceName());
+        }
+        // Wait for data from the queue
+        csvLine = "";
+        nbLines = 0;
+        while (xQueueReceive(measurementQueue, &measurement, portMAX_DELAY) == pdPASS && fileName != "" && nbLines < NB_MEASURE_BEFORE_SD) {
+            // Prepare a CSV line
+            csvLine += String(wifiController.formatCurrentTime(measurement.timeinfo, true, false) + "," +
+                              String(measurement.busVolts, 3) + "," +
+                              String(measurement.currentMilliAmps, 3) + "\n");
+            nbLines++;
+        }
+        if (nbLines > 0) {
+            // Write the CSV line to the file
+            file = SD.open(fileName.c_str(), FILE_APPEND);
+            file.print(csvLine);
+            file.close();
+        }
     }
 }

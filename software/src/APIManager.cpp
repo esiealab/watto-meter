@@ -6,6 +6,11 @@ APIManager::APIManager(int port, String mainFolder)
         Serial.println("An Error has occurred while mounting SPIFFS");
         return;
     }
+
+    if (!SD.begin()) {
+        Serial.println("An Error has occurred while mounting SD");
+        return;
+    }
 }
 
 void APIManager::begin() {

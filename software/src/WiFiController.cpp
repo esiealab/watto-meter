@@ -2,13 +2,13 @@
 
 WiFiController::WiFiController(long timezone, byte daysavetime)
     : timezone(timezone), daysavetime(daysavetime) {
-        uniqueHostname = "WM-" + String((uint32_t)ESP.getEfuseMac(), HEX);
-        uniqueHostname.toUpperCase();
-        wifiManager.setHostname(uniqueHostname.c_str());
+    uniqueHostname = "WM-" + String((uint32_t)ESP.getEfuseMac(), HEX);
+    uniqueHostname.toUpperCase();
+    wifiManager.setHostname(uniqueHostname.c_str());
 
-        wifiManager.setConfigPortalBlocking(true);
-        //wifiManager.setConfigPortalTimeout(30);  // Set timeout to 30 seconds
-    }
+    wifiManager.setConfigPortalBlocking(true);
+    // wifiManager.setConfigPortalTimeout(30);  // Set timeout to 30 seconds
+}
 
 void WiFiController::connect(void (*configModeCallback)(WiFiManager *)) {
     if (configModeCallback != NULL) {
@@ -21,7 +21,7 @@ void WiFiController::connect(void (*configModeCallback)(WiFiManager *)) {
             Serial.println("Please connect to the WiFi network and open the config portal.");
         });
     }
-    
+
     wifiManager.autoConnect(uniqueHostname.c_str(), NULL);
     Serial.printf("WiFi connected to %s\n", getSSID());
     Serial.printf("IP address: %s\n", getIPAddress());

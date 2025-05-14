@@ -6,7 +6,7 @@
 #include <time.h>
 
 class WiFiController {
-public:
+   public:
     WiFiController(long timezone, byte daysavetime);
     void connect(void (*configModeCallback)(WiFiManager *) = NULL);
     void syncTime();
@@ -19,11 +19,11 @@ public:
     bool isConfigMode();
     String getInfosMessage();
 
-private:
+   private:
     WiFiManager wifiManager;
     long timezone;
     byte daysavetime;
     String uniqueHostname;
 };
 
-#endif // WIFI_CONTROLLER_H
+#endif  // WIFI_CONTROLLER_H

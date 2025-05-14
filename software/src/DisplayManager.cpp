@@ -18,8 +18,8 @@ void DisplayManager::showMessage(String message, bool clearScreen, uint8_t start
     if (icon != NULL) {
         display.drawBitmap(startColumn, startLine * 10, icon, 8, 8, WHITE);
         startColumn = 10;
-    }   
-    display.setCursor(startColumn, startLine * 10); // Assuming each line is 10 pixels high
+    }
+    display.setCursor(startColumn, startLine * 10);  // Assuming each line is 10 pixels high
     display.println(message);
     if (forceDisplay) {
         display.display();
