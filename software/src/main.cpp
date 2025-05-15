@@ -16,9 +16,9 @@
 
 #define INA_SHUNT_MICRO_OHM 2000                       // 2 mOhm
 #define INA_MAXIMUM_AMPS 5                             // Expected max 5A
-#define INA_BUS_CONVERSION_TIME 8500                   // Conversion time for bus voltage
-#define INA_SHUNT_CONVERSION_TIME 8500                 // Conversion time for shunt voltage
-#define INA_AVERAGING_COUNT 128                        // Averaging count
+#define INA_BUS_CONVERSION_TIME 1                      // Conversion time in nanosecond for bus voltage
+#define INA_SHUNT_CONVERSION_TIME 1                    // Conversion time in nanosecond for shunt voltage
+#define INA_AVERAGING_COUNT 128                        // Averaging count (number of sample to average to compute a value)
 #define INA_MEASUREMENT_MODE INA_MODE_CONTINUOUS_BOTH  // Measurement mode
 
 #define I2C_SDA_PIN 3            // SDA pin
@@ -32,8 +32,8 @@
 
 // Frequency of the measure task
 const int MEASURE_TASK_PERIOD = 2;
-const int SD_TASK_PERIOD = MEASURE_TASK_PERIOD*10;
-const uint8_t NB_MEASURE_MAX_BEFORE_SD = MEASURE_TASK_PERIOD*20;  // Number of measures before writing to SD
+const int SD_TASK_PERIOD = MEASURE_TASK_PERIOD * 10;
+const uint8_t NB_MEASURE_MAX_BEFORE_SD = MEASURE_TASK_PERIOD * 20;  // Number of measures before writing to SD
 void readI2CTask(void *parameter);
 void writeSDTask(void *parameter);
 
@@ -46,6 +46,7 @@ void setupWiFiServer(void *parameter);
 struct MeasurementData {
     float busVolts;
     float currentMilliAmps;
+    float powerWatts;
     struct tm timeinfo;
     uint16_t milliseconds;
 } measurement;
@@ -131,7 +132,7 @@ void setup() {
         NULL,                   // Task handle (not used here)
         1                       // Run on core 1
     );
-    
+
     // Create a task for initialization
     xTaskCreatePinnedToCore(
         setupWiFiServer,  // Task function
@@ -142,7 +143,6 @@ void setup() {
         NULL,             // Task handle (not used here)
         1                 // Run on core 1
     );
-
 }
 
 void loop() {
@@ -195,6 +195,7 @@ void readI2CTask(void *parameter) {
             measurement.milliseconds = pdTICKS_TO_MS(xLastWakeTime) % 1000;
             measurement.busVolts = inaManager.getBusVolts();
             measurement.currentMilliAmps = inaManager.getCurrentMilliAmps();
+            measurement.powerWatts = inaManager.getPowerWatts();
 
             // Send data to the queue
             if (xQueueSend(measurementQueue, &measurement, 0) != pdPASS) {
@@ -224,7 +225,7 @@ void writeSDTask(void *parameter) {
             fileName = "/" + apiManager.getDeviceName() + "_" +
                        wifiController.formatCurrentTime(timeinfo, false, true) + ".csv";
             file = SD.open(fileName.c_str(), FILE_WRITE);
-            file.println("Timestamp,BusVolts,CurrentMilliAmps");
+            file.println("Timestamp,BusVolts,CurrentMilliAmps,PowerWatts");
             file.close();
 
             Serial.println("Measuring for device: " + apiManager.getDeviceName());
@@ -236,7 +237,8 @@ void writeSDTask(void *parameter) {
             // Prepare a CSV line
             csvLine += String(wifiController.formatCurrentTime(measurement.timeinfo, true, false, measurement.milliseconds) + "," +
                               String(measurement.busVolts, 3) + "," +
-                              String(measurement.currentMilliAmps, 3) + "\n");
+                              String(measurement.currentMilliAmps, 3) + "," +
+                              String(measurement.powerWatts, 3) + "\n");
             nbLines++;
         }
         if (nbLines > 0) {
@@ -245,7 +247,7 @@ void writeSDTask(void *parameter) {
             file.print(csvLine);
             file.close();
         }
-        
+
         // Delay before the next reading
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(SD_TASK_PERIOD));
     }
