@@ -47,17 +47,20 @@ struct tm WiFiController::getCurrentTime() {
     return timeinfo;
 }
 
-String WiFiController::formatCurrentTime(struct tm timeinfo, bool millisec, bool shortFormat) {
+String WiFiController::formatCurrentTime(struct tm timeinfo, bool millisec, bool shortFormat, uint16_t milliseconds) {
     char buffer[24];
-    int milliseconds = millis() % 1000;  // Get milliseconds
+    int millis = pdTICKS_TO_MS(xTaskGetTickCount()) % 1000;  // Get milliseconds
     if (shortFormat) {
         sprintf(buffer, "%d-%02d-%02d-%02d%02d%02d",
                 timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
                 timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
     } else if (millisec) {
+        if (milliseconds != -1) {
+            millis = milliseconds;
+        }
         sprintf(buffer, "%d-%02d-%02d %02d:%02d:%02d.%03d",
                 timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
-                timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, milliseconds);
+                timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, millis);
     } else {
         sprintf(buffer, "%d-%02d-%02d %02d:%02d:%02d",
                 timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,

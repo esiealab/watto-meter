@@ -32,7 +32,8 @@
 
 // Frequency of the measure task
 const int MEASURE_TASK_PERIOD = 2;
-const uint8_t NB_MEASURE_BEFORE_SD = 50;  // Number of measures before writing to SD
+const int SD_TASK_PERIOD = MEASURE_TASK_PERIOD*10;
+const uint8_t NB_MEASURE_MAX_BEFORE_SD = MEASURE_TASK_PERIOD*20;  // Number of measures before writing to SD
 void readI2CTask(void *parameter);
 void writeSDTask(void *parameter);
 
@@ -46,6 +47,7 @@ struct MeasurementData {
     float busVolts;
     float currentMilliAmps;
     struct tm timeinfo;
+    uint16_t milliseconds;
 } measurement;
 
 INAManager inaManager;
@@ -119,6 +121,17 @@ void setup() {
         1                 // Run on core 1
     );
 
+    // Start the display update task
+    xTaskCreatePinnedToCore(
+        updateDisplayTask,      // Task function
+        "Update Display Task",  // Task name
+        4096,                   // Stack size
+        NULL,                   // Task parameter
+        2,                      // Task priority
+        NULL,                   // Task handle (not used here)
+        1                       // Run on core 1
+    );
+    
     // Create a task for initialization
     xTaskCreatePinnedToCore(
         setupWiFiServer,  // Task function
@@ -130,16 +143,6 @@ void setup() {
         1                 // Run on core 1
     );
 
-    // Start the display update task
-    xTaskCreatePinnedToCore(
-        updateDisplayTask,      // Task function
-        "Update Display Task",  // Task name
-        4096,                   // Stack size
-        NULL,                   // Task parameter
-        3,                      // Task priority
-        NULL,                   // Task handle (not used here)
-        1                       // Run on core 1
-    );
 }
 
 void loop() {
@@ -160,7 +163,7 @@ void setupWiFiServer(void *parameter) {
 
 void updateDisplayTask(void *parameter) {
     TickType_t xLastWakeTime = xTaskGetTickCount();
-    float busVolts, currentMilliAmps, powerWatts;
+    float busVolts, currentMilliAmps;
     struct tm timeinfo;
 
     while (true) {
@@ -189,6 +192,7 @@ void readI2CTask(void *parameter) {
         if (apiManager.isMeasuring()) {
             // Read data from INA
             measurement.timeinfo = wifiController.getCurrentTime();
+            measurement.milliseconds = pdTICKS_TO_MS(xLastWakeTime) % 1000;
             measurement.busVolts = inaManager.getBusVolts();
             measurement.currentMilliAmps = inaManager.getCurrentMilliAmps();
 
@@ -208,14 +212,17 @@ void writeSDTask(void *parameter) {
     File file;
     String csvLine;
     uint8_t nbLines = 0;
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    struct tm timeinfo;
 
     while (true) {
         if (!apiManager.isMeasuring()) {
             fileName = "";  // Reset the file name if measurements are stopped
         } else if (fileName == "") {
             // Create a new file if necessary
+            timeinfo = wifiController.getCurrentTime();
             fileName = "/" + apiManager.getDeviceName() + "_" +
-                       wifiController.formatCurrentTime(measurement.timeinfo, false, true) + ".csv";
+                       wifiController.formatCurrentTime(timeinfo, false, true) + ".csv";
             file = SD.open(fileName.c_str(), FILE_WRITE);
             file.println("Timestamp,BusVolts,CurrentMilliAmps");
             file.close();
@@ -225,9 +232,9 @@ void writeSDTask(void *parameter) {
         // Wait for data from the queue
         csvLine = "";
         nbLines = 0;
-        while (xQueueReceive(measurementQueue, &measurement, portMAX_DELAY) == pdPASS && fileName != "" && nbLines < NB_MEASURE_BEFORE_SD) {
+        while (xQueueReceive(measurementQueue, &measurement, portMAX_DELAY) == pdPASS && fileName != "" && nbLines < NB_MEASURE_MAX_BEFORE_SD) {
             // Prepare a CSV line
-            csvLine += String(wifiController.formatCurrentTime(measurement.timeinfo, true, false) + "," +
+            csvLine += String(wifiController.formatCurrentTime(measurement.timeinfo, true, false, measurement.milliseconds) + "," +
                               String(measurement.busVolts, 3) + "," +
                               String(measurement.currentMilliAmps, 3) + "\n");
             nbLines++;
@@ -238,5 +245,8 @@ void writeSDTask(void *parameter) {
             file.print(csvLine);
             file.close();
         }
+        
+        // Delay before the next reading
+        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(SD_TASK_PERIOD));
     }
 }

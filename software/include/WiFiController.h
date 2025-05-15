@@ -11,7 +11,7 @@ class WiFiController {
     void connect(void (*configModeCallback)(WiFiManager *) = NULL);
     void syncTime();
     struct tm getCurrentTime();
-    String formatCurrentTime(struct tm timeinfo, bool millisec = false, bool shortFormat = false);
+    String formatCurrentTime(struct tm timeinfo, bool millisec = false, bool shortFormat = false, uint16_t milliseconds = -1);
     String getSSID();
     String getIPAddress();
     String getHostname();
