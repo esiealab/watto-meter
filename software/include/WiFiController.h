@@ -10,8 +10,8 @@ class WiFiController {
     WiFiController(long timezone, byte daysavetime);
     void connect(void (*configModeCallback)(WiFiManager *) = NULL);
     void syncTime();
-    struct tm getCurrentTime();
-    String formatCurrentTime(struct tm timeinfo, bool millisec = false, bool shortFormat = false, uint16_t milliseconds = -1);
+    uint64_t getCurrentTime_us();
+    String formatCurrentTime(uint64_t time_us, bool millisec = false, bool shortFormat = false);
     String getSSID();
     String getIPAddress();
     String getHostname();

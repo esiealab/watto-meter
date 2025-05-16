@@ -31,9 +31,9 @@
 #define QUEUE_SIZE 1000
 
 // Frequency of the measure task
-const int MEASURE_TASK_PERIOD = 2;
-const int SD_TASK_PERIOD = MEASURE_TASK_PERIOD * 10;
-const uint8_t NB_MEASURE_MAX_BEFORE_SD = MEASURE_TASK_PERIOD * 20;  // Number of measures before writing to SD
+const int MEASURE_TASK_PERIOD = 3;
+const int SD_TASK_PERIOD = MEASURE_TASK_PERIOD * 20;
+const uint8_t NB_MEASURE_MAX_BEFORE_SD = SD_TASK_PERIOD * 2;  // Number of measures before writing to SD
 void readI2CTask(void *parameter);
 void writeSDTask(void *parameter);
 
@@ -47,9 +47,8 @@ struct MeasurementData {
     float busVolts;
     float currentMilliAmps;
     float powerWatts;
-    struct tm timeinfo;
-    uint16_t milliseconds;
-} measurement;
+    uint64_t time_us;
+};
 
 INAManager inaManager;
 DisplayManager displayManager(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
@@ -57,7 +56,6 @@ WiFiController wifiController(TIMEZONE, DAYLIGHT_SAVING);
 APIManager apiManager(80);
 String fileName = "";
 String deviceName = "";
-String csvLine = "";
 
 QueueHandle_t measurementQueue;
 
@@ -164,18 +162,18 @@ void setupWiFiServer(void *parameter) {
 void updateDisplayTask(void *parameter) {
     TickType_t xLastWakeTime = xTaskGetTickCount();
     float busVolts, currentMilliAmps;
-    struct tm timeinfo;
+    uint64_t time_us;
 
     while (true) {
         displayManager.showMessage(wifiController.getInfosMessage(), true, 0, false, wifiicon);
 
         // Retrieve measurements for display
-        timeinfo = wifiController.getCurrentTime();
+        time_us = wifiController.getCurrentTime_us();
         busVolts = inaManager.getBusVolts();
         currentMilliAmps = inaManager.getCurrentMilliAmps();
 
         UBaseType_t queueFillPercentage = (uxQueueMessagesWaiting(measurementQueue) * 100) / (uxQueueSpacesAvailable(measurementQueue) + uxQueueMessagesWaiting(measurementQueue));
-        displayManager.showMessage(String(wifiController.formatCurrentTime(timeinfo, false, false) + "\nQueue: " + String(queueFillPercentage) + "%\n" +
+        displayManager.showMessage(String(wifiController.formatCurrentTime(time_us, false, false) + "\nQueue: " + String(queueFillPercentage) + "%\n" +
                                           "Volt: " + String(busVolts, 2) + "V\n" +
                                           "Current: " + String(currentMilliAmps, 2) + "mA\n"),
                                    false, 3, true, NULL);
@@ -187,16 +185,15 @@ void updateDisplayTask(void *parameter) {
 
 void readI2CTask(void *parameter) {
     TickType_t xLastWakeTime = xTaskGetTickCount();
+    struct MeasurementData measurement;
 
     while (true) {
         if (apiManager.isMeasuring()) {
             // Read data from INA
-            measurement.timeinfo = wifiController.getCurrentTime();
-            measurement.milliseconds = pdTICKS_TO_MS(xLastWakeTime) % 1000;
+            measurement.time_us = wifiController.getCurrentTime_us();
             measurement.busVolts = inaManager.getBusVolts();
             measurement.currentMilliAmps = inaManager.getCurrentMilliAmps();
             measurement.powerWatts = inaManager.getPowerWatts();
-
             // Send data to the queue
             if (xQueueSend(measurementQueue, &measurement, 0) != pdPASS) {
                 Serial.println("Measurement queue full, data dropped");
@@ -211,44 +208,59 @@ void readI2CTask(void *parameter) {
 
 void writeSDTask(void *parameter) {
     File file;
-    String csvLine;
-    uint8_t nbLines = 0;
+    String csvBuffer;
+    csvBuffer.reserve(50*NB_MEASURE_MAX_BEFORE_SD);
+    uint16_t nbLines = 0;
     TickType_t xLastWakeTime = xTaskGetTickCount();
-    struct tm timeinfo;
+    struct MeasurementData measurement;
+    bool measuringPrev = false;
 
     while (true) {
-        if (!apiManager.isMeasuring()) {
-            fileName = "";  // Reset the file name if measurements are stopped
-        } else if (fileName == "") {
-            // Create a new file if necessary
-            timeinfo = wifiController.getCurrentTime();
-            fileName = "/" + apiManager.getDeviceName() + "_" +
-                       wifiController.formatCurrentTime(timeinfo, false, true) + ".csv";
-            file = SD.open(fileName.c_str(), FILE_WRITE);
-            file.println("Timestamp,BusVolts,CurrentMilliAmps,PowerWatts");
-            file.close();
+        bool measuring = apiManager.isMeasuring();
 
-            Serial.println("Measuring for device: " + apiManager.getDeviceName());
+        // Start new file if needed
+        if (measuring && !measuringPrev) {
+            fileName = "/" + apiManager.getDeviceName() + "_" +
+                       wifiController.formatCurrentTime(wifiController.getCurrentTime_us(), false, true) + ".csv";
+            file = SD.open(fileName.c_str(), FILE_WRITE);
+            if (file) {
+                file.println("Timestamp,BusVolts,CurrentMilliAmps,PowerWatts");
+                file.close();
+                Serial.println("Measuring for device: " + apiManager.getDeviceName());
+            }
+            nbLines = 0;
+            csvBuffer = "";
         }
-        // Wait for data from the queue
-        csvLine = "";
+
+        // If not measuring, reset state and close file if open
+        if (!measuring) {
+            fileName = "";
+            measuringPrev = false;
+            vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(SD_TASK_PERIOD));
+            continue;
+        }
+
+        // Read as many measurements as possible up to NB_MEASURE_MAX_BEFORE_SD
         nbLines = 0;
-        while (xQueueReceive(measurementQueue, &measurement, portMAX_DELAY) == pdPASS && fileName != "" && nbLines < NB_MEASURE_MAX_BEFORE_SD) {
-            // Prepare a CSV line
-            csvLine += String(wifiController.formatCurrentTime(measurement.timeinfo, true, false, measurement.milliseconds) + "," +
-                              String(measurement.busVolts, 3) + "," +
-                              String(measurement.currentMilliAmps, 3) + "," +
-                              String(measurement.powerWatts, 3) + "\n");
+        csvBuffer = "";
+        while (nbLines < NB_MEASURE_MAX_BEFORE_SD && xQueueReceive(measurementQueue, &measurement, 0) == pdPASS) {
+            csvBuffer += String(wifiController.formatCurrentTime(measurement.time_us, true, false) + "," +
+                                String(measurement.busVolts, 3) + "," +
+                                String(measurement.currentMilliAmps, 3) + "," +
+                                String(measurement.powerWatts, 3) + "\n");
             nbLines++;
         }
-        if (nbLines > 0) {
-            // Write the CSV line to the file
+
+        // Write buffer if there is data
+        if (nbLines > 0 && fileName != "") {
             file = SD.open(fileName.c_str(), FILE_APPEND);
-            file.print(csvLine);
-            file.close();
+            if (file) {
+                file.print(csvBuffer);
+                file.close();
+            }
         }
 
-        // Delay before the next reading
+        measuringPrev = measuring;
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(SD_TASK_PERIOD));
     }
 }

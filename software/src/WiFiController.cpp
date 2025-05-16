@@ -30,7 +30,7 @@ void WiFiController::connect(void (*configModeCallback)(WiFiManager *)) {
 
 void WiFiController::syncTime() {
     configTime(3600 * timezone, daysavetime * 3600, "pool.ntp.org", "time.nist.gov");
-    struct tm timeinfo;
+    struct tm timeinfo;    
     if (!getLocalTime(&timeinfo)) {
         Serial.println("Failed to obtain time");
         return;
@@ -40,27 +40,33 @@ void WiFiController::syncTime() {
                   timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
 }
 
-struct tm WiFiController::getCurrentTime() {
-    struct tm timeinfo = {};
-    if (!getLocalTime(&timeinfo))
-        return timeinfo;
-    return timeinfo;
+uint64_t WiFiController::getCurrentTime_us() {
+    struct timeval tv_now;
+    gettimeofday(&tv_now, NULL);
+    uint64_t time_us = (uint64_t)tv_now.tv_sec * 1000000L + (uint64_t)tv_now.tv_usec;
+    return time_us;
 }
 
-String WiFiController::formatCurrentTime(struct tm timeinfo, bool millisec, bool shortFormat, uint16_t milliseconds) {
+String WiFiController::formatCurrentTime(uint64_t time_us, bool millisec, bool shortFormat) {
     char buffer[24];
-    int millis = pdTICKS_TO_MS(xTaskGetTickCount()) % 1000;  // Get milliseconds
+    struct tm timeinfo;
+    uint16_t milliseconds = 0;
+
+    // Convert microseconds to seconds and get the timeinfo
+    time_t seconds = time_us / 1000000;
+    localtime_r(&seconds, &timeinfo);
+    if (millisec) {
+        milliseconds = time_us % 1000000 / 1000;
+    }
+
     if (shortFormat) {
         sprintf(buffer, "%d-%02d-%02d-%02d%02d%02d",
                 timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
                 timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
     } else if (millisec) {
-        if (milliseconds != -1) {
-            millis = milliseconds;
-        }
         sprintf(buffer, "%d-%02d-%02d %02d:%02d:%02d.%03d",
                 timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
-                timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, millis);
+                timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, milliseconds);
     } else {
         sprintf(buffer, "%d-%02d-%02d %02d:%02d:%02d",
                 timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
