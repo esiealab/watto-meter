@@ -3,3 +3,5 @@
 
 include/WiFiConfig.h
 
+!results/example.csv
+
